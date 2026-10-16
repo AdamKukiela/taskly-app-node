@@ -64,7 +64,14 @@ The earlier automated coverage run loaded all three skills and produced a verifi
 
 The post-review live evaluation passed 7/7 fixtures using 18 API requests across the configured model and fallbacks. Deterministic runner tests also cover malformed-candidate repair, failing-baseline refusal, and rejecting skips for wholly unexecuted modules.
 
-The [clear-completed example PR](https://github.com/AdamKukiela/taskly-app-node/pull/1) exercises both application packages. The PR comment links the exact workflow run, records selected skills, and shows baseline/candidate test counts, coverage, and any verified patch. Its initial `SKIPPED` result incorrectly treated a mocked button as implementation coverage; the analysis skill and mocked-parent evaluation were corrected after review.
+The [clear-completed example PR](https://github.com/AdamKukiela/taskly-app-node/pull/1) exercises both application packages. [Run 38919704434](https://github.com/AdamKukiela/taskly-app-node/actions/runs/38919704434) finished `VERIFIED` on head `9aab49c` using `gemini-3.5-flash-lite`:
+
+- `analyze-changes` identified the button and mutation hook as unexecuted in per-file baseline coverage; existing backend/API tests were retained.
+- `frontend-unit-tests` generated two files containing three tests. The first candidate failed frontend typecheck, tests, and formatting. Compiler/test diagnostics were fed back; the second candidate passed every check. The run used three API requests.
+- Backend tests stayed at 74 with 78.35% statement coverage. Frontend tests increased from 49 to 52, statements from 82.87% to 87.84%, and branches from 73.33% to 77.33%.
+- The verified patch and report were published in the PR comment, Actions summary, and artifact. Before committing the patch, unused test wrappers were removed, JSX conventions restored, and hook assertions strengthened to inspect the actual cache. Host verification passed again.
+
+The final example branch also includes four page-level integration cases covering success/notification/refetch, API failure, pending/duplicate-action prevention, and no completed tasks. Together with the reviewed agent patch, it passes 74 backend and 56 frontend tests. Later pushes update the sticky comment for the current SHA; the linked verified run preserves the generation/repair evidence.
 
 ## Assumptions and limits
 
