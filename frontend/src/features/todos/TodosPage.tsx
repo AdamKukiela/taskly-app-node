@@ -3,6 +3,7 @@ import { Alert, Button } from '../../design-system'
 import { SuccessNotice } from '../../components/SuccessNotice'
 import { useNotice } from '../../hooks/useNotice'
 import { DeleteTodoDialog } from './components/DeleteTodoDialog'
+import { ClearCompletedButton } from './components/ClearCompletedButton'
 import { TodoEditor } from './components/TodoEditor'
 import { TodoFilters } from './components/TodoFilters'
 import { TodoList } from './components/TodoList'
@@ -51,6 +52,18 @@ export function TodosPage() {
         <TodosHeader
           disabled={todosQuery.isPending || busy}
           onCreate={() => setEditor('new')}
+        />
+        <ClearCompletedButton
+          disabled={
+            todosQuery.isPending ||
+            busy ||
+            !todos.some((todo) => todo.completed)
+          }
+          onCleared={(count) =>
+            notify(
+              `${count} completed ${count === 1 ? 'task' : 'tasks'} cleared.`,
+            )
+          }
         />
         <TodoFilters
           filter={filters.filter}

@@ -25,6 +25,9 @@ vi.mock('./components/TodoEditor', () => ({ TodoEditor: () => null }))
 vi.mock('./components/DeleteTodoDialog', () => ({
   DeleteTodoDialog: () => null,
 }))
+vi.mock('./components/ClearCompletedButton', () => ({
+  ClearCompletedButton: () => null,
+}))
 vi.mock('../../components/SuccessNotice', () => ({ SuccessNotice: () => null }))
 
 it('displays a query failure and resets mutation errors before retrying', async () => {

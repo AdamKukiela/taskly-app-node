@@ -5,6 +5,27 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/todos/completed": {
+      "delete": {
+        "summary": "Delete completed tasks",
+        "responses": {
+          "200": {
+            "description": "Completed tasks deleted; repeated calls may delete zero tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["deletedCount"],
+                  "properties": {
+                    "deletedCount": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "responses": {

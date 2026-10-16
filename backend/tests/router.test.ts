@@ -11,6 +11,7 @@ function setup() {
     get: vi.fn().mockResolvedValue(todo),
     update: vi.fn().mockResolvedValue(todo),
     delete: vi.fn().mockResolvedValue(true),
+    deleteCompleted: vi.fn(),
   };
   const app = express();
   app.use(express.json());
@@ -30,6 +31,15 @@ it('creates tasks with trimmed input and defaults', async () => {
   expect(response.status).toBe(201);
   expect(response.body).toEqual(todo);
   expect(repository.create).toHaveBeenCalledWith({ title: 'Plan the sprint', description: '', priority: 'high', due_date: null, completed: false });
+});
+
+it('clears completed tasks and returns the deleted count', async () => {
+  const { app, repository } = setup();
+  repository.deleteCompleted.mockResolvedValue(3);
+  const response = await request(app).delete('/api/todos/completed');
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({ deletedCount: 3 });
+  expect(repository.deleteCompleted).toHaveBeenCalledOnce();
 });
 it.each([{ title: '  ' }, { title: 'x'.repeat(121) }, { title: 'Task', priority: 'urgent' }, { title: 'Task', due_date: '2026-02-30' }])(
   'rejects invalid create input without calling the repository: %j', async (payload) => {
