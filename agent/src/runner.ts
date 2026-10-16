@@ -28,7 +28,7 @@ export async function run(options: Options): Promise<Report> {
   const started = Date.now();
   const report: Report = {
     version: 1, status: 'FAILED', base: options.base, head: options.head, mode: options.mode,
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash', skills: [], reason: '',
+    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash', skills: [], reason: '',
     attempts: [], files: [], modifiedExistingTests: [], requests: 0, inputTokens: 0, outputTokens: 0, durationMs: 0,
   };
   let provider: Gemini | undefined;

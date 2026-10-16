@@ -16,9 +16,13 @@ export class Gemini {
     const input = JSON.stringify(data);
     if (Buffer.byteLength(input + instructions) > 1024 * 1024) throw new AgentError('LIMIT_EXCEEDED', 'Model context exceeds 1 MiB');
     const { $schema, ...jsonSchema } = z.toJSONSchema(schema);
+    const models = this.model.startsWith('gemini-')
+      ? [this.model, 'gemini-3.7-flash', 'gemini-3.5-flash-lite']
+      : [this.model];
     for (let attempt = 0; attempt < 3; attempt++) {
+      const targetModel = models[Math.min(attempt, models.length - 1)];
       this.requests++;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': this.key },
         signal: AbortSignal.timeout(120_000),
         body: JSON.stringify({
@@ -28,12 +32,15 @@ export class Gemini {
         }),
       });
       if (!response.ok) {
+        const failure = await response.json().catch(() => null) as { error?: { message?: string } } | null;
         if ((response.status === 429 || response.status >= 500) && attempt < 2) {
           const retryAfter = Number(response.headers.get('retry-after'));
           await new Promise(resolve => setTimeout(resolve, Math.min(30, retryAfter > 0 ? retryAfter : 2 ** (attempt + 1)) * 1000));
           continue;
         }
-        throw new AgentError(response.status === 401 || response.status === 403 || response.status === 404 ? 'CONFIG_ERROR' : 'FAILED', `Gemini HTTP ${response.status}`);
+        const diagnostic = response.status === 429 || response.status >= 500
+          ? `: ${(failure?.error?.message ?? 'Provider unavailable').replaceAll(this.key, '[REDACTED]').slice(0, 600)}` : '';
+        throw new AgentError(response.status === 401 || response.status === 403 || response.status === 404 ? 'CONFIG_ERROR' : 'FAILED', `Gemini HTTP ${response.status}${diagnostic}`);
       }
       const body = await response.json() as {
         usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
