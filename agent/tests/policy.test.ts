@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { safePath, testPath, requiresReview, validateCandidate, validateTest } from '../src/policy.ts';
+import { safePath, testPath, requiresReview, validateAnalysis, validateCandidate, validateTest } from '../src/policy.ts';
+import type { Analysis } from '../src/contracts.ts';
 
 test('allows backend and frontend test conventions', () => {
   assert.equal(testPath('backend/tests/router.test.ts'), true);
@@ -23,6 +24,26 @@ test('rejects duplicate files and files outside selected targets', () => {
   const file = { path: 'backend/tests/router.test.ts', content: 'it("works", () => expect(true).toBe(true))' };
   assert.throws(() => validateCandidate({ decision: 'propose', reason: 'test', files: [file, file] }, new Set([file.path])));
   assert.throws(() => validateCandidate({ decision: 'propose', reason: 'test', files: [file] }, new Set()));
+});
+
+test('analysis requires actionable targets in the selected package', () => {
+  const analysis: Analysis = { decision: 'generate', reason: 'Missing tests', evidence: [], targets: [] };
+  const source = 'backend/src/limit.ts';
+  assert.throws(() => validateAnalysis(analysis, [source]), /no concrete test targets/);
+  analysis.decision = 'update';
+  assert.throws(() => validateAnalysis(analysis, [source]), /no concrete test targets/);
+  analysis.targets = [{ source, test: 'frontend/src/limit.test.ts', behaviors: ['caps count'] }];
+  assert.throws(() => validateAnalysis(analysis, [source]), /unsupported source or test/);
+  analysis.targets[0].test = 'backend/tests/limit.test.ts';
+  assert.deepEqual([...validateAnalysis(analysis, [source])], ['backend/tests/limit.test.ts']);
+});
+
+test('skipping changed behavior requires evidence while docs-only skips do not', () => {
+  const analysis: Analysis = { decision: 'skip', reason: 'Covered', evidence: [], targets: [] };
+  assert.throws(() => validateAnalysis(analysis, ['backend/src/limit.ts']), /requires evidence/);
+  assert.doesNotThrow(() => validateAnalysis(analysis, []));
+  analysis.evidence = ['backend/tests/limit.test.ts: caps count asserts the maximum'];
+  assert.doesNotThrow(() => validateAnalysis(analysis, ['backend/src/limit.ts']));
 });
 test('rejects focused, disabled, and aliased test declarations', () => {
   for (const content of [

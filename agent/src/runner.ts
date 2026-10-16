@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { format } from 'prettier';
 import { analysisSchema, candidateSchema, AgentError, type Report, type Verification } from './contracts.ts';
-import { sourcePath, requiresReview, testPath, validateCandidate } from './policy.ts';
+import { sourcePath, requiresReview, validateAnalysis, validateCandidate } from './policy.ts';
 import { changedPaths, collectContext, diff, readTree, revision, writeTree } from './repository.ts';
 import { command } from './process.ts';
 import { Gemini } from './model.ts';
@@ -80,18 +80,11 @@ export async function run(options: Options): Promise<Report> {
     const evidence = { mode: options.mode, targets, changes, files: context, baseline: report.baseline.results.map(({ output, ...result }) => result) };
     console.error('[agent] Analyzing behavior and existing coverage');
     report.analysis = await provider.generate(analysisSchema, `${definition}\n${analyzer}`, evidence);
+    const permitted = validateAnalysis(report.analysis, targets);
     if (report.analysis.decision === 'skip' || report.analysis.decision === 'needs_review') {
       report.status = report.analysis.decision === 'skip' ? 'SKIPPED' : 'NEEDS_REVIEW';
       report.reason = report.analysis.reason;
       return report;
-    }
-    if (!report.analysis.targets.length) throw new AgentError('NEEDS_REVIEW', 'Analysis proposed no concrete test targets.');
-    const permitted = new Set<string>();
-    for (const target of report.analysis.targets) {
-      if (!targets.includes(target.source) || !testPath(target.test) || target.source.split('/')[0] !== target.test.split('/')[0]) {
-        throw new AgentError('NEEDS_REVIEW', `Analysis selected an unsupported source or test: ${target.source} → ${target.test}`);
-      }
-      permitted.add(target.test);
     }
     const writers: string[] = [];
     if (report.analysis.targets.some(target => target.source.startsWith('backend/'))) writers.push(await skill('backend-unit-tests'));

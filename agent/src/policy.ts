@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { AgentError, type Candidate } from './contracts.ts';
+import { AgentError, type Analysis, type Candidate } from './contracts.ts';
 
 export function safePath(path: string): boolean {
   return /^[a-zA-Z0-9_@./-]+$/.test(path) && !path.startsWith('/') &&
@@ -19,6 +19,22 @@ export function requiresReview(paths: string[]): boolean {
     /(^|\/)(AGENTS\.md|CLAUDE\.md|package(-lock)?\.json|.*lock.*|.*config\.[^/]+|Dockerfile|\.npmrc|\.yarnrc.*|\.gitattributes|\.node-version|\.nvmrc)$/.test(path) ||
     path === 'frontend/src/test/setup.ts' ||
     /^backend\/prisma\//.test(path));
+}
+export function validateAnalysis(analysis: Analysis, sources: string[]): Set<string> {
+  const permitted = new Set<string>();
+  if (analysis.decision === 'skip' && sources.length && !analysis.evidence.length) {
+    throw new AgentError('NEEDS_REVIEW', 'Skipping changed behavior requires evidence from existing tests.');
+  }
+  if (['generate', 'update'].includes(analysis.decision) && !analysis.targets.length) {
+    throw new AgentError('NEEDS_REVIEW', 'Analysis proposed no concrete test targets.');
+  }
+  for (const target of analysis.targets) {
+    if (!sources.includes(target.source) || !testPath(target.test) || target.source.split('/')[0] !== target.test.split('/')[0]) {
+      throw new AgentError('NEEDS_REVIEW', `Analysis selected an unsupported source or test: ${target.source} → ${target.test}`);
+    }
+    permitted.add(target.test);
+  }
+  return permitted;
 }
 export function validateTest(path: string, content: string): void {
   const syntax = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true,
