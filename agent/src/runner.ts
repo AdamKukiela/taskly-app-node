@@ -21,6 +21,17 @@ export function preserveBaseline(baseline: Verification, result: Verification): 
       result.passed = false;
       if (current) { current.exitCode = 1; current.output += '\nTest count decreased or pending tests increased.'; }
     }
+    if (previous.coverage) {
+      for (const metric of ['lines', 'statements', 'functions', 'branches'] as const) {
+        if (!current?.coverage || current.coverage[metric].covered < previous.coverage[metric].covered) {
+          result.passed = false;
+          if (current) {
+            current.exitCode = 1;
+            current.output += `\nCovered ${metric} decreased or coverage is missing.`;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -63,7 +74,7 @@ export async function run(options: Options): Promise<Report> {
     await sandbox.prepare();
     console.error('[agent] Running baseline checks');
     report.baseline = await sandbox.verify();
-    if (!report.baseline.passed) throw new AgentError('BASELINE_FAILED', 'Existing tests or type checks fail on the input SHA. See baseline diagnostics.');
+    if (!report.baseline.passed) throw new AgentError('BASELINE_FAILED', 'Existing tests or type checks fail on the input SHA. Review failures and update intended contract changes manually before generation.');
     const definition = await readFile(join(agentDirectory, 'AGENT.md'), 'utf8');
     const analyzer = await skill('analyze-changes');
     const evidence = { mode: options.mode, targets, changes, files: context, baseline: report.baseline.results.map(({ output, ...result }) => result) };
@@ -97,10 +108,15 @@ export async function run(options: Options): Promise<Report> {
         continue;
       }
       validateCandidate(candidate, permitted);
-      for (const file of candidate.files) {
-        if (file.path.startsWith('frontend/')) {
-          file.content = await format(file.content, { parser: 'typescript', semi: false, singleQuote: true, trailingComma: 'all' });
+      try {
+        for (const file of candidate.files) {
+          if (file.path.startsWith('frontend/')) {
+            file.content = await format(file.content, { parser: 'typescript', semi: false, singleQuote: true, trailingComma: 'all' });
+          }
         }
+      } catch (error) {
+        feedback = { candidate, error: error instanceof Error ? error.message.slice(-8000) : 'Frontend formatting failed.' };
+        continue;
       }
       candidate.files = candidate.files.filter(file => tree.get(file.path) !== file.content);
       if (!candidate.files.length) { report.status = 'SKIPPED'; report.reason = 'Candidate made no changes to the existing tests.'; return report; }

@@ -24,12 +24,14 @@ export function validateTest(path: string, content: string): void {
   const syntax = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true,
     path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const names = new Set(['it', 'test', 'describe']);
+  const expectations = new Set(['expect']);
   for (const statement of syntax.statements) {
     if (ts.isImportDeclaration(statement) && statement.moduleSpecifier.getText(syntax).includes('vitest')) {
       const bindings = statement.importClause?.namedBindings;
       if (bindings && ts.isNamedImports(bindings)) {
         for (const binding of bindings.elements) {
           if (['it', 'test', 'describe'].includes(binding.propertyName?.text ?? binding.name.text)) names.add(binding.name.text);
+          if ((binding.propertyName?.text ?? binding.name.text) === 'expect') expectations.add(binding.name.text);
         }
       }
     }
@@ -45,7 +47,16 @@ export function validateTest(path: string, content: string): void {
         throw new AgentError('NEEDS_REVIEW', `Disabled or focused test in ${path}`);
       }
     }
-    if (ts.isCallExpression(node) && /\bexpect(?:\.|\()/.test(node.getText(syntax))) assertions++;
+    if (ts.isCallExpression(node) && (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))) {
+      let subject = node.expression.expression;
+      while (ts.isPropertyAccessExpression(subject) || ts.isElementAccessExpression(subject)) subject = subject.expression;
+      if (ts.isCallExpression(subject)) {
+        const callee = subject.expression;
+        if (ts.isIdentifier(callee) && expectations.has(callee.text) ||
+            ts.isPropertyAccessExpression(callee) && ['soft', 'poll'].includes(callee.name.text) &&
+            ts.isIdentifier(callee.expression) && expectations.has(callee.expression.text)) assertions++;
+      }
+    }
     ts.forEachChild(node, visit);
   }
   visit(syntax);

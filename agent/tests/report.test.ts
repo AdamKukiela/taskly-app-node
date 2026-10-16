@@ -29,3 +29,23 @@ test('marks fewer tests or additional skipped tests as failed verification', () 
   assert.equal(candidate.passed, false);
   assert.equal(candidate.results[0].exitCode, 1);
 });
+
+test('rejects lost covered code even when test counts are unchanged', () => {
+  const metric = { total: 100, covered: 90, pct: 90 };
+  const baseline: Verification = { passed: true, results: [{ name: 'backend:tests', command: 'vitest', exitCode: 0, output: '', tests: { passed: 10, failed: 0, pending: 0, total: 10 }, coverage: { lines: metric, statements: metric, functions: metric, branches: metric } }] };
+  for (const name of ['lines', 'statements', 'functions', 'branches'] as const) {
+    const candidate = structuredClone(baseline);
+    candidate.results[0].coverage![name] = { total: 100, covered: 1, pct: 1 };
+    preserveBaseline(baseline, candidate);
+    assert.equal(candidate.passed, false, name);
+    assert.match(candidate.results[0].output, new RegExp(`Covered ${name} decreased`));
+  }
+  const expanded = structuredClone(baseline);
+  expanded.results[0].coverage!.statements = { total: 200, covered: 100, pct: 50 };
+  preserveBaseline(baseline, expanded);
+  assert.equal(expanded.passed, true);
+  const missing = structuredClone(baseline);
+  delete missing.results[0].coverage;
+  preserveBaseline(baseline, missing);
+  assert.equal(missing.passed, false);
+});

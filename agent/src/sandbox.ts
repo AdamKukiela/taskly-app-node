@@ -1,4 +1,4 @@
-import { lstat, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { lstat, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { command } from './process.ts';

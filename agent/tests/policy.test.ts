@@ -37,3 +37,17 @@ test('rejects focused, disabled, and aliased test declarations', () => {
 test('accepts expect.any and forbidden words inside tested data', () => {
   assert.doesNotThrow(() => validateTest('backend/tests/case.test.ts', 'it("case", () => { expect(new Date()).toEqual(expect.any(Date)); expect("it.skip @ts-ignore").toContain("skip") })'));
 });
+
+test('requires a matcher call rather than expectation-shaped text or setup', () => {
+  for (const content of [
+    'it("empty", () => { const text = "expect("; })',
+    'it("empty", () => { expect(true); })',
+    'it("empty", () => { const value = expect.any(String); })',
+    'expect.assertions(1); it("empty", () => {})',
+  ]) assert.throws(() => validateTest('backend/tests/case.test.ts', content), /No assertions/);
+  for (const content of [
+    'import { expect as check } from "vitest"; it("works", () => check(1).toBe(1))',
+    'it("works", async () => { await expect(Promise.reject(1)).rejects.toBe(1) })',
+    'it("works", () => expect.soft(1).not.toBe(2))',
+  ]) assert.doesNotThrow(() => validateTest('backend/tests/case.test.ts', content));
+});
