@@ -40,3 +40,33 @@ it('shows a deletion error and allows cancelling without deleting', async () => 
   expect(mutateAsync).not.toHaveBeenCalled()
   expect(onDeleted).not.toHaveBeenCalled()
 })
+
+it('deletes the task and notifies onDeleted, or keeps dialog open on failure', async () => {
+  const user = userEvent.setup()
+  const mutateAsync = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Network error'))
+    .mockResolvedValueOnce(undefined)
+  vi.mocked(useDeleteTodoMutation).mockReturnValue({
+    isPending: false,
+    error: null,
+    mutateAsync,
+  } as unknown as ReturnType<typeof useDeleteTodoMutation>)
+  const onClose = vi.fn()
+  const onDeleted = vi.fn()
+  render(
+    <DeleteTodoDialog
+      todo={todoFixture}
+      busy={false}
+      onClose={onClose}
+      onDeleted={onDeleted}
+    />,
+  )
+
+  await user.click(screen.getByRole('button', { name: 'Delete task' }))
+  expect(mutateAsync).toHaveBeenCalledWith(todoFixture.id)
+  expect(onDeleted).not.toHaveBeenCalled()
+
+  await user.click(screen.getByRole('button', { name: 'Delete task' }))
+  expect(onDeleted).toHaveBeenCalledTimes(1)
+})
