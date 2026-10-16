@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, symlink, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { currentReport, ownComment, readArtifact, marker } from '../src/publish.ts';
+import { currentReport, ownComment, readArtifact, marker, pullSchema, commentsSchema } from '../src/publish.ts';
 import type { Report } from '../src/contracts.ts';
 
 test('only updates comments owned by the GitHub Actions bot', () => {
@@ -17,6 +17,14 @@ test('rejects stale or incorrectly associated reports', () => {
   assert.equal(currentReport(report, report.head, report.head), true);
   assert.equal(currentReport(report, report.head, 'b'.repeat(40)), false);
   assert.equal(currentReport(report, 'b'.repeat(40), 'b'.repeat(40)), false);
+});
+
+test('validates the GitHub response fields used for publication', () => {
+  assert.throws(() => pullSchema.parse({ head: { sha: 1 } }));
+  assert.throws(() => commentsSchema.parse([{ id: '1', user: { login: 'github-actions[bot]' } }]));
+  assert.throws(() => commentsSchema.parse({ length: 0 }));
+  const comments = commentsSchema.parse([{ id: 1, body: null, user: null }]);
+  assert.equal(ownComment(comments), undefined);
 });
 test('rejects symlinks and oversized artifacts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'taskly-artifact-'));

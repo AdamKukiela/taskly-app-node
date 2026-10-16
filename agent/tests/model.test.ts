@@ -18,6 +18,7 @@ test('sends selected instructions, validates structured output, and counts usage
     assert.equal(result.decision, 'skip');
     assert.equal(model.outputTokens, 10);
     assert.equal(model.requests, 1);
+    assert.deepEqual(model.modelsUsed, ['fixture-model']);
   } finally { request.mock.restore(); }
 });
 test('does not accept truncated output', async () => {
@@ -28,5 +29,27 @@ test('does not accept truncated output', async () => {
 test('reports authentication failures without leaking response contents', async () => {
   const request = mock.method(globalThis, 'fetch', async () => new Response('sensitive provider response', { status: 403 }));
   try { await assert.rejects(new Gemini('fixture', 'test-key').generate(candidateSchema, '', {}), { message: 'Gemini HTTP 403' }); }
+  finally { request.mock.restore(); }
+});
+
+test('records the successful fallback model after a transient failure', async () => {
+  const urls: string[] = [];
+  const request = mock.method(globalThis, 'fetch', async (url: string | URL | Request) => {
+    urls.push(String(url));
+    if (urls.length === 1) return Response.json({ error: { message: 'Busy' } }, { status: 503, headers: { 'retry-after': '1' } });
+    return Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{"decision":"skip","reason":"covered","evidence":[],"targets":[]}' }] } }] });
+  });
+  try {
+    const model = new Gemini('gemini-primary', 'test-key');
+    await model.generate(analysisSchema, '', {});
+    assert.match(urls[1], /gemini-3\.7-flash:generateContent$/);
+    assert.deepEqual(model.modelsUsed, ['gemini-3.7-flash']);
+    assert.equal(model.requests, 2);
+  } finally { request.mock.restore(); }
+});
+
+test('rejects malformed provider metadata instead of trusting a type assertion', async () => {
+  const request = mock.method(globalThis, 'fetch', async () => Response.json({ usageMetadata: { promptTokenCount: 'invalid' }, candidates: [] }));
+  try { await assert.rejects(new Gemini('fixture', 'test-key').generate(analysisSchema, '', {})); }
   finally { request.mock.restore(); }
 });

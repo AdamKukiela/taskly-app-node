@@ -152,6 +152,7 @@ export async function run(options: Options): Promise<Report> {
     sandbox?.close();
     if (temporary) await rm(temporary, { recursive: true, force: true });
     report.requests = provider?.requests ?? 0;
+    if (provider?.modelsUsed.length) report.model = provider.modelsUsed.join(', ');
     report.inputTokens = provider?.inputTokens ?? 0;
     report.outputTokens = provider?.outputTokens ?? 0;
     report.durationMs = Date.now() - started;

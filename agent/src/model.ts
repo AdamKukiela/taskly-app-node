@@ -1,12 +1,26 @@
 import { z } from 'zod';
 import { AgentError } from './contracts.ts';
 
+const responseSchema = z.object({
+  usageMetadata: z.object({
+    promptTokenCount: z.number().nonnegative().optional(),
+    candidatesTokenCount: z.number().nonnegative().optional(),
+    thoughtsTokenCount: z.number().nonnegative().optional(),
+  }).optional(),
+  candidates: z.array(z.object({
+    finishReason: z.string().optional(),
+    content: z.object({ parts: z.array(z.object({ text: z.string().optional(), thought: z.boolean().optional() })).optional() }).optional(),
+  })).optional(),
+});
+const errorSchema = z.object({ error: z.object({ message: z.string().optional() }).optional() });
+
 export class Gemini {
   model: string;
   key: string;
   requests = 0;
   inputTokens = 0;
   outputTokens = 0;
+  modelsUsed: string[] = [];
   constructor(model: string, key: string) {
     if (!/^[a-zA-Z0-9.-]+$/.test(model) || !key) throw new AgentError('CONFIG_ERROR', 'Set GEMINI_API_KEY and a valid GEMINI_MODEL');
     this.model = model;
@@ -32,20 +46,18 @@ export class Gemini {
         }),
       });
       if (!response.ok) {
-        const failure = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        const failure = errorSchema.safeParse(await response.json().catch(() => null));
         if ((response.status === 429 || response.status >= 500) && attempt < 2) {
           const retryAfter = Number(response.headers.get('retry-after'));
           await new Promise(resolve => setTimeout(resolve, Math.min(30, retryAfter > 0 ? retryAfter : 2 ** (attempt + 1)) * 1000));
           continue;
         }
         const diagnostic = response.status === 429 || response.status >= 500
-          ? `: ${(failure?.error?.message ?? 'Provider unavailable').replaceAll(this.key, '[REDACTED]').slice(0, 600)}` : '';
+          ? `: ${(failure.success ? failure.data.error?.message ?? 'Provider unavailable' : 'Provider unavailable').replaceAll(this.key, '[REDACTED]').slice(0, 600)}` : '';
         throw new AgentError(response.status === 401 || response.status === 403 || response.status === 404 ? 'CONFIG_ERROR' : 'FAILED', `Gemini HTTP ${response.status}${diagnostic}`);
       }
-      const body = await response.json() as {
-        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
-        candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[];
-      };
+      const body = responseSchema.parse(await response.json());
+      if (!this.modelsUsed.includes(targetModel)) this.modelsUsed.push(targetModel);
       this.inputTokens += body.usageMetadata?.promptTokenCount ?? 0;
       this.outputTokens += (body.usageMetadata?.candidatesTokenCount ?? 0) + (body.usageMetadata?.thoughtsTokenCount ?? 0);
       const candidate = body.candidates?.[0];
