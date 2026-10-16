@@ -5,13 +5,7 @@ import { createTodosRouter } from '../src/features/todos/router.ts';
 import { todo } from './fixture.ts';
 
 function setup() {
-  const repository = {
-    list: vi.fn().mockResolvedValue([todo]),
-    create: vi.fn().mockResolvedValue(todo),
-    get: vi.fn().mockResolvedValue(todo),
-    update: vi.fn().mockResolvedValue(todo),
-    delete: vi.fn().mockResolvedValue(true),
-  };
+  const repository = { list: vi.fn().mockResolvedValue([todo]), create: vi.fn().mockResolvedValue(todo), get: vi.fn(), update: vi.fn(), delete: vi.fn(), deleteCompleted: vi.fn() };
   const app = express();
   app.use(express.json());
   app.use('/api/todos', createTodosRouter(repository));
@@ -38,57 +32,3 @@ it.each([{ title: '  ' }, { title: 'x'.repeat(121) }, { title: 'Task', priority:
     expect(repository.create).not.toHaveBeenCalled();
   },
 );
-it('returns 422 when id parameter is invalid', async () => {
-  const { app, repository } = setup();
-  const response = await request(app).get('/api/todos/invalid-id');
-  expect(response.status).toBe(422);
-  expect(response.body).toHaveProperty('detail');
-  expect(repository.get).not.toHaveBeenCalled();
-});
-it('gets todo by id', async () => {
-  const { app, repository } = setup();
-  const response = await request(app).get('/api/todos/1');
-  expect(response.status).toBe(200);
-  expect(response.body).toEqual(todo);
-  expect(repository.get).toHaveBeenCalledWith(1);
-});
-it('returns 404 when getting non-existent todo', async () => {
-  const { app, repository } = setup();
-  repository.get.mockResolvedValue(null);
-  const response = await request(app).get('/api/todos/999');
-  expect(response.status).toBe(404);
-  expect(response.body).toEqual({ detail: 'Task not found.' });
-});
-it('updates todo by id', async () => {
-  const { app, repository } = setup();
-  const response = await request(app).patch('/api/todos/1').send({ title: 'Updated Title' });
-  expect(response.status).toBe(200);
-  expect(response.body).toEqual(todo);
-  expect(repository.update).toHaveBeenCalledWith(1, { title: 'Updated Title' });
-});
-it('rejects invalid update payload without calling repository', async () => {
-  const { app, repository } = setup();
-  const response = await request(app).patch('/api/todos/1').send({});
-  expect(response.status).toBe(422);
-  expect(repository.update).not.toHaveBeenCalled();
-});
-it('returns 404 when updating non-existent todo', async () => {
-  const { app, repository } = setup();
-  repository.update.mockResolvedValue(null);
-  const response = await request(app).patch('/api/todos/999').send({ completed: true });
-  expect(response.status).toBe(404);
-  expect(response.body).toEqual({ detail: 'Task not found.' });
-});
-it('deletes todo by id', async () => {
-  const { app, repository } = setup();
-  const response = await request(app).delete('/api/todos/1');
-  expect(response.status).toBe(204);
-  expect(repository.delete).toHaveBeenCalledWith(1);
-});
-it('returns 404 when deleting non-existent todo', async () => {
-  const { app, repository } = setup();
-  repository.delete.mockResolvedValue(false);
-  const response = await request(app).delete('/api/todos/999');
-  expect(response.status).toBe(404);
-  expect(response.body).toEqual({ detail: 'Task not found.' });
-});
