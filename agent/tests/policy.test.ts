@@ -77,7 +77,7 @@ test('requires a matcher call rather than expectation-shaped text or setup', () 
     'it("empty", () => { expect(true); })',
     'it("empty", () => { const value = expect.any(String); })',
     'expect.assertions(1); it("empty", () => {})',
-  ]) assert.throws(() => validateTest('backend/tests/case.test.ts', content), /No assertions/);
+  ]) assert.throws(() => validateTest('backend/tests/case.test.ts', content), /No assertion matcher calls/);
   for (const content of [
     'import { expect as check } from "vitest"; it("works", () => check(1).toBe(1))',
     'it("works", async () => { await expect(Promise.reject(1)).rejects.toBe(1) })',

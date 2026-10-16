@@ -54,7 +54,7 @@ test('does not rewrite expectations when the input baseline fails', async () => 
   }
 });
 
-test('repairs a malformed frontend candidate and publishes only the verified replacement', async () => {
+test('repairs assertion-free and malformed candidates before publishing a verified replacement', async () => {
   const context = await fixture();
   const verify = mock.method(Sandbox.prototype, 'verify', async () => {
     const result = structuredClone(baseline);
@@ -64,6 +64,7 @@ test('repairs a malformed frontend candidate and publishes only the verified rep
   const feedback: unknown[] = [];
   const responses = [
     { decision: 'generate', reason: 'Missing label test', evidence: [], targets: [{ source: 'frontend/src/label.ts', test: 'frontend/src/label.test.ts', behaviors: ['exports the task label'] }] },
+    { decision: 'propose', reason: 'Test label', files: [{ path: 'frontend/src/label.test.ts', content: 'import { it } from "vitest"; it("label", () => {});' }] },
     { decision: 'propose', reason: 'Test label', files: [{ path: 'frontend/src/label.test.ts', content: 'it("label", () => { expect(1).toBe(1)' }] },
     { decision: 'propose', reason: 'Test label', files: [{ path: 'frontend/src/label.test.ts', content: 'import { it, expect } from "vitest"; import { label } from "./label"; it("label", () => expect(label).toBe("task"));' }] },
   ];
@@ -77,9 +78,10 @@ test('repairs a malformed frontend candidate and publishes only the verified rep
   try {
     const report = await run(context.options);
     assert.equal(report.status, 'VERIFIED');
-    assert.equal(generate.mock.callCount(), 3);
+    assert.equal(generate.mock.callCount(), 4);
     assert.equal(verify.mock.callCount(), 2);
     assert.match(JSON.stringify(feedback.at(-1)), /expected/);
+    assert.match(JSON.stringify(feedback[2]), /No assertion matcher calls/);
     assert.match(await readFile(join(context.options.output, 'verified-tests.patch'), 'utf8'), /expect\(label\)/);
   } finally {
     verify.mock.restore();

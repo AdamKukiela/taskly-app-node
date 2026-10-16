@@ -97,12 +97,12 @@ export async function run(options: Options): Promise<Report> {
       let candidate;
       try {
         candidate = await provider.generate(candidateSchema, `${definition}\n${writers.join('\n')}`, { ...evidence, analysis: report.analysis, feedback });
+        validateCandidate(candidate, permitted);
       } catch (error) {
         if (error instanceof AgentError || attempt === 2) throw error;
-        feedback = { error: 'Your response was not valid JSON matching the provided schema.' };
+        feedback = { candidate, error: error instanceof Error ? error.message.slice(-8000) : 'Invalid candidate response.' };
         continue;
       }
-      validateCandidate(candidate, permitted);
       try {
         for (const file of candidate.files) {
           if (file.path.startsWith('frontend/')) {

@@ -86,7 +86,7 @@ export function validateTest(path: string, content: string): void {
       throw new AgentError('NEEDS_REVIEW', `Suppressed validation in ${path}`);
     }
   }
-  if (!assertions) throw new AgentError('NEEDS_REVIEW', `No assertions in ${path}`);
+  if (!assertions) throw new Error(`No assertion matcher calls in ${path}. Write executable Vitest assertions; use .test.tsx for JSX tests.`);
 }
 export function validateCandidate(candidate: Candidate, permitted: Set<string>): void {
   if (candidate.decision !== 'propose' || !candidate.files.length) throw new AgentError('NEEDS_REVIEW', candidate.reason);
