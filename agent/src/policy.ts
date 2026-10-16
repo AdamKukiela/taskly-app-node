@@ -20,13 +20,16 @@ export function requiresReview(paths: string[]): boolean {
     path === 'frontend/src/test/setup.ts' ||
     /^backend\/prisma\//.test(path));
 }
-export function validateAnalysis(analysis: Analysis, sources: string[]): Set<string> {
+export function validateAnalysis(analysis: Analysis, sources: string[], uncovered: string[] = []): Set<string> {
   const permitted = new Set<string>();
   if (analysis.decision === 'skip' && sources.length && !analysis.evidence.length) {
     throw new AgentError('NEEDS_REVIEW', 'Skipping changed behavior requires evidence from existing tests.');
   }
   if (['generate', 'update'].includes(analysis.decision) && !analysis.targets.length) {
     throw new AgentError('NEEDS_REVIEW', 'Analysis proposed no concrete test targets.');
+  }
+  if (analysis.decision !== 'needs_review' && uncovered.some(source => !analysis.targets.some(target => target.source === source))) {
+    throw new AgentError('NEEDS_REVIEW', 'Analysis omitted source modules with no executed behavior coverage.');
   }
   for (const target of analysis.targets) {
     if (!sources.includes(target.source) || !testPath(target.test) || target.source.split('/')[0] !== target.test.split('/')[0]) {

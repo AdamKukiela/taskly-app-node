@@ -23,6 +23,7 @@ export type SuiteResult = {
   name: string; command: string; exitCode: number; output: string;
   tests?: { passed: number; failed: number; pending: number; total: number };
   coverage?: Coverage;
+  uncoveredFiles?: string[];
 };
 export type Verification = { passed: boolean; results: SuiteResult[] };
 const metricSchema = z.object({ total: z.number().nonnegative(), covered: z.number().nonnegative(), pct: z.number().min(0).max(100) });
@@ -31,6 +32,7 @@ export const verificationSchema = z.object({
     name: z.string().max(100), command: z.string().max(1000), exitCode: z.number().int(), output: z.string().max(16000),
     tests: z.object({ passed: z.number().nonnegative(), failed: z.number().nonnegative(), pending: z.number().nonnegative(), total: z.number().nonnegative() }).optional(),
     coverage: z.object({ lines: metricSchema, statements: metricSchema, functions: metricSchema, branches: metricSchema }).optional(),
+    uncoveredFiles: z.array(z.string().max(300)).max(20).optional(),
   })).max(6),
 });
 export type Report = {

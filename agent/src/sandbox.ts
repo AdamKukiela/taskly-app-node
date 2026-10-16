@@ -23,12 +23,12 @@ export class Sandbox {
     ].join('\n'));
     command('docker', ['build', '--tag', this.image, '--file', join(this.directory, 'Dockerfile.agent'), this.directory], { timeout: 600_000 });
   }
-  async verify(candidateDirectory?: string, files: string[] = []): Promise<Verification> {
+  async verify(candidateDirectory?: string, files: string[] = [], sources: string[] = []): Promise<Verification> {
     const name = `taskly-check-${randomUUID()}`;
     const formatting = files.filter(path => path.startsWith('frontend/')).map(path => path.slice('frontend/'.length));
     const checks = ['backend', 'frontend'].flatMap(side => [
       { name: `${side}:types`, cwd: `/workspace/${side}`, executable: './node_modules/.bin/tsc', args: ['--noEmit'] },
-      { name: `${side}:tests`, cwd: `/workspace/${side}`, executable: './node_modules/.bin/vitest', args: ['run', '--coverage', '--coverage.reporter=json-summary', '--coverage.reporter=text', '--reporter=json', `--outputFile=/tmp/${side}-tests.json`] },
+      { name: `${side}:tests`, cwd: `/workspace/${side}`, executable: './node_modules/.bin/vitest', args: ['run', '--expect.requireAssertions', '--coverage', '--coverage.reporter=json-summary', '--coverage.reporter=text', '--reporter=json', `--outputFile=/tmp/${side}-tests.json`] },
     ]);
     if (formatting.length) checks.push({ name: 'frontend:format', cwd: '/workspace/frontend', executable: './node_modules/.bin/prettier', args: ['--check', ...formatting] });
     const script = `
@@ -43,8 +43,14 @@ export class Sandbox {
           try {
             const tests = JSON.parse(readFileSync('/tmp/' + side + '-tests.json', 'utf8'));
             result.tests = { passed: tests.numPassedTests, failed: tests.numFailedTests, pending: tests.numPendingTests, total: tests.numTotalTests };
-            const coverage = JSON.parse(readFileSync(check.cwd + '/coverage/coverage-summary.json', 'utf8')).total;
+            const summary = JSON.parse(readFileSync(check.cwd + '/coverage/coverage-summary.json', 'utf8'));
+            const coverage = summary.total;
             result.coverage = Object.fromEntries(['lines', 'statements', 'functions', 'branches'].map(metric => [metric, coverage[metric]]));
+            result.uncoveredFiles = ${JSON.stringify(sources)}.filter(source => {
+              const metrics = summary['/workspace/' + source];
+              return source.startsWith(side + '/') && metrics &&
+                (metrics.statements.total > 0 && metrics.statements.covered === 0 || metrics.functions.total > 0 && metrics.functions.covered === 0);
+            });
             if (!tests.numTotalTests || tests.numFailedTests || tests.numRuntimeErrorTestSuites) result.exitCode = 1;
           } catch (error) { result.exitCode = 1; result.output += '\\nMissing test or coverage report'; }
         }

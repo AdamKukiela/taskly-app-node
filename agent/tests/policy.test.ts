@@ -45,6 +45,18 @@ test('skipping changed behavior requires evidence while docs-only skips do not',
   analysis.evidence = ['backend/tests/limit.test.ts: caps count asserts the maximum'];
   assert.doesNotThrow(() => validateAnalysis(analysis, ['backend/src/limit.ts']));
 });
+
+test('does not accept skipping or omitting a module with unexecuted behavior', () => {
+  const source = 'frontend/src/label.ts';
+  const analysis: Analysis = { decision: 'skip', reason: 'Covered', evidence: ['Parent mocks label'], targets: [] };
+  assert.throws(() => validateAnalysis(analysis, [source], [source]), /omitted source modules/);
+  analysis.decision = 'generate';
+  analysis.targets = [{ source, test: 'frontend/src/label.test.ts', behaviors: ['labels tasks'] }];
+  assert.doesNotThrow(() => validateAnalysis(analysis, [source], [source]));
+  analysis.decision = 'needs_review';
+  analysis.targets = [];
+  assert.doesNotThrow(() => validateAnalysis(analysis, [source], [source]));
+});
 test('rejects focused, disabled, and aliased test declarations', () => {
   for (const content of [
     'it.skip("case", () => expect(true).toBe(true))',

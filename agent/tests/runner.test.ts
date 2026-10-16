@@ -56,7 +56,11 @@ test('does not rewrite expectations when the input baseline fails', async () => 
 
 test('repairs a malformed frontend candidate and publishes only the verified replacement', async () => {
   const context = await fixture();
-  const verify = mock.method(Sandbox.prototype, 'verify', async () => structuredClone(baseline));
+  const verify = mock.method(Sandbox.prototype, 'verify', async () => {
+    const result = structuredClone(baseline);
+    result.results[0].uncoveredFiles = ['frontend/src/label.ts'];
+    return result;
+  });
   const feedback: unknown[] = [];
   const responses = [
     { decision: 'generate', reason: 'Missing label test', evidence: [], targets: [{ source: 'frontend/src/label.ts', test: 'frontend/src/label.test.ts', behaviors: ['exports the task label'] }] },
@@ -65,6 +69,9 @@ test('repairs a malformed frontend candidate and publishes only the verified rep
   ];
   const generate = mock.method(Gemini.prototype, 'generate', async function<Schema extends z.ZodType>(schema: Schema, _instructions: string, data: unknown): Promise<z.infer<Schema>> {
     feedback.push(data);
+    if (feedback.length === 1) {
+      assert.equal(schema.safeParse({ decision: 'skip', reason: 'Mocked parent', evidence: ['Parent test'], targets: [] }).success, false);
+    }
     return schema.parse(responses.shift());
   });
   try {

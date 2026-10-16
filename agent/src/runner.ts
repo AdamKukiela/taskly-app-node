@@ -73,14 +73,16 @@ export async function run(options: Options): Promise<Report> {
     console.error('[agent] Preparing dependency image once for this run');
     await sandbox.prepare();
     console.error('[agent] Running baseline checks');
-    report.baseline = await sandbox.verify();
+    report.baseline = await sandbox.verify(undefined, [], targets);
     if (!report.baseline.passed) throw new AgentError('BASELINE_FAILED', 'Existing tests or type checks fail on the input SHA. Review failures and update intended contract changes manually before generation.');
     const definition = await readFile(join(agentDirectory, 'AGENT.md'), 'utf8');
     const analyzer = await skill('analyze-changes');
     const evidence = { mode: options.mode, targets, changes, files: context, baseline: report.baseline.results.map(({ output, ...result }) => result) };
     console.error('[agent] Analyzing behavior and existing coverage');
-    report.analysis = await provider.generate(analysisSchema, `${definition}\n${analyzer}`, evidence);
-    const permitted = validateAnalysis(report.analysis, targets);
+    const uncovered = report.baseline.results.flatMap(result => result.uncoveredFiles ?? []);
+    const schema = uncovered.length ? analysisSchema.extend({ decision: analysisSchema.shape.decision.exclude(['skip']) }) : analysisSchema;
+    report.analysis = await provider.generate(schema, `${definition}\n${analyzer}`, evidence);
+    const permitted = validateAnalysis(report.analysis, targets, uncovered);
     if (report.analysis.decision === 'skip' || report.analysis.decision === 'needs_review') {
       report.status = report.analysis.decision === 'skip' ? 'SKIPPED' : 'NEEDS_REVIEW';
       report.reason = report.analysis.reason;
