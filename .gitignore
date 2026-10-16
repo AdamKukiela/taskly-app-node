@@ -10,6 +10,7 @@ backend/src/generated/prisma/
 
 # Test coverage
 coverage/
+agent/results/
 
 # Local environment variables
 .env
