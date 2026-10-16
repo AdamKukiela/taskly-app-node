@@ -1,0 +1,111 @@
+name: Unit test agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-test-agent-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  eligibility:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Explain supported scope
+        env:
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          if [ "$FORK" = "true" ]; then
+            echo 'Generation skipped: fork PRs do not receive the Gemini secret.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DRAFT" = "true" ]; then
+            echo 'Generation skipped: mark this PR ready for review.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'This PR is eligible for test generation.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  generate:
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: application
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.14.1'
+      - name: Install trusted runner
+        working-directory: control/agent
+        run: npm ci --ignore-scripts
+      - name: Check runner
+        working-directory: control/agent
+        run: |
+          npm run typecheck
+          npm test
+      - name: Analyze, generate, and verify
+        working-directory: control/agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.6-flash' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npm run run -- --mode pr --repo ../../application --base "$BASE_SHA" --head "$HEAD_SHA" --output results
+      - name: Publish workflow summary
+        if: always()
+        run: |
+          if [ -f control/agent/results/report.md ]; then
+            cat control/agent/results/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: unit-test-agent-report
+          path: control/agent/results/
+          retention-days: 30
+          if-no-files-found: warn
+
+  publish:
+    needs: generate
+    if: always() && !cancelled() && needs.generate.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.14.1'
+      - name: Install trusted publisher
+        working-directory: agent
+        run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          name: unit-test-agent-report
+          path: agent/results
+      - name: Update PR comment
+        working-directory: agent
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node src/publish-cli.ts results
